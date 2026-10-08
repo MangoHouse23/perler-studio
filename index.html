@@ -71,8 +71,11 @@ header{position:sticky; top:0; z-index:30; display:flex; align-items:center; gap
 .btn-export{background:var(--berry); border-color:var(--berry); color:#fff;
   box-shadow:0 6px 16px -6px rgba(216,78,66,.55);}
 .btn-export:hover{background:var(--berry-deep); border-color:var(--berry-deep); color:#fff; filter:none;}
-.size-ctl{display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; background:#fff; border:1px solid var(--line); font-size:13px; font-weight:600; color:var(--ink-2);}
-.size-ctl input{width:52px; border:1px solid var(--line); border-radius:9px; padding:4px 6px; text-align:center; font-size:13px; font-weight:700; color:var(--ink); background:var(--card-2);}
+.size-ctl{display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; background:#fff; border:1px solid var(--line); font-size:13px; font-weight:600; color:var(--ink-2); flex-wrap:wrap;}
+.size-ctl .s-mini{display:flex; align-items:center; gap:3px; font-weight:600; color:var(--ink-3); font-size:12px;}
+.size-ctl input{width:48px; border:1px solid var(--line); border-radius:9px; padding:4px 6px; text-align:center; font-size:13px; font-weight:700; color:var(--ink); background:var(--card-2);}
+.size-ctl .s-mini input{width:44px;}
+.size-ctl .s-x{color:var(--ink-3); font-weight:700;}
 
 /* ---------- Layout ---------- */
 .wrap{display:grid; grid-template-columns:296px minmax(0,1fr) 360px; gap: var(--sp-16); padding:var(--sp-16); align-items:start; max-width:1600px; margin:0 auto;}
@@ -240,9 +243,12 @@ header{position:sticky; top:0; z-index:30; display:flex; align-items:center; gap
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 1 0 0 11H13"/></svg>重做</button>
     <button class="iconbtn" id="btnClear" title="清空画面">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h4l1-2h8l1 2h4M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>清空</button>
-    <label class="size-ctl">尺寸
-      <input id="sizeInput" type="number" min="4" max="64" value="20"> × <span id="sizeY">20</span>
-    </label>
+    <div class="size-ctl"><span>尺寸</span>
+      <label class="s-mini">列<input id="sizeCol" type="number" min="4" max="64" value="20" title="列数(宽)"></label>
+      <span class="s-x">×</span>
+      <label class="s-mini">行<input id="sizeRow" type="number" min="4" max="64" value="20" title="行数(高)"></label>
+      <label class="s-mini" title="画布格子总数 = 列 × 行">豆<input id="sizeTotal" type="number" min="16" max="4096" value="400"></label>
+    </div>
     <button class="iconbtn btn-export" id="btnExport">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>一键导出</button>
   </div>
@@ -497,14 +503,21 @@ let tool='pen', sym='none', cur=PALETTE[7].hex;
 const undo=[]; const redo=[];
 
 function makeGrid(h,w){return Array.from({length:h},()=>Array(w).fill(null));}
-function resize(apply){
-  // 自适应：保证新画布能放得下当前内容(居中)
-  const ng=makeGrid(H?H:apply,HW);
-  if(grid.length){for(let y=0;y<Math.min(H,ng.length);y++){for(let x=0;x<Math.min(W,ng[0].length);x++){ng[y][x]=grid[y][x];}}}
-  H=ng.length;W=ng[0].length;grid=ng;
-  document.getElementById('sizeInput').value=W;
-  document.getElementById('sizeY').textContent=H;
-  render();
+// 按列(宽)/行(高)重设画布：保留原内容居中
+function applySize(nw,nh){
+  nw=Math.max(4,Math.min(64,Math.round(+nw)||W));
+  nh=Math.max(4,Math.min(64,Math.round(+nh)||H));
+  const ng=makeGrid(nh,nw);
+  if(grid.length){for(let y=0;y<Math.min(H,nh);y++){for(let x=0;x<Math.min(W,nw);x++){ng[y][x]=grid[y][x];}}}
+  H=nh;W=nw;grid=ng;docSize();render();
+}
+// 按总豆(格子数=列×行)反推近似正方形尺寸
+function dimsForTotal(t){
+  t=Math.max(16,Math.min(4096,Math.round(+t)||400));
+  const sq=Math.floor(Math.sqrt(t));
+  const cols=Math.max(4,Math.min(64,sq));
+  const rows=Math.max(4,Math.min(64,Math.round(t/cols)));
+  return [cols,rows];
 }
 
 /* ================= 画布渲染 ================= */
@@ -670,7 +683,7 @@ function applyDesign(url){
     const v=22;
     pushHist();
     const ng=makeGrid(v,v); H=W=v; grid=ng;
-    document.getElementById('sizeInput').value=W;document.getElementById('sizeY').textContent=H;
+    docSize();
     const c=document.createElement('canvas');c.width=v;c.height=v;
     const g=c.getContext('2d');
     g.fillStyle='#FFFFFF';g.fillRect(0,0,v,v);
@@ -703,7 +716,7 @@ function bounce(img,w,h){const c=document.createElement('canvas');c.width=w;c.he
 function toImageBead(){
   const v=+document.getElementById('detailRange').value;
   pushHist(); H=W=v; grid=makeGrid(v,v);
-  document.getElementById('sizeInput').value=W;document.getElementById('sizeY').textContent=H;
+  docSize();
   const c=document.createElement('canvas');const g=c.getContext('2d');
   let sw,sh,dx,dy;
   if(imgMode==='fit'){c.width=v;c.height=v;g.fillStyle='#fff';g.fillRect(0,0,v,v);const iw=imgBitmap.width,ih=imgBitmap.height;const s=Math.max(v/iw,v/ih);sw=iw*s;sh=ih*s;dx=(v-sw)/2;dy=(v-sh)/2;g.drawImage(imgBitmap,dx,dy,sw,sh);}
@@ -844,7 +857,9 @@ function saveWork(){const name=prompt('给这张作品起个名字吧','我的�
   mworks.unshift({name:name,grid:grid.map(r=>r.slice()),w:W,h:H});saveMine();renderMine();toast('已存入「我的作品」🏠');}
 function saveMine(){localStorage.setItem('pd_works',JSON.stringify(mworks.slice(0,30)));}
 function loadWork(w){pushHist();grid=w.grid.map(r=>r.slice());H=w.h;W=w.w;docSize();render();updateInfo();}
-function docSize(){document.getElementById('sizeInput').value=W;document.getElementById('sizeY').textContent=H;}
+function docSize(){
+  if(document.getElementById('sizeCol')){document.getElementById('sizeCol').value=W;document.getElementById('sizeRow').value=H;document.getElementById('sizeTotal').value=W*H;}
+}
 
 /* 导入导出 json */
 document.getElementById('btnImport').onclick=()=>document.getElementById('jsonInput').click();
@@ -973,13 +988,15 @@ function rotateCW(){const ng=makeGrid(W,H);for(let y=0;y<H;y++)for(let x=0;x<W;x
 function flipH(){for(let y=0;y<H;y++){grid[y].reverse();}}
 
 /* ================= 初始化 ================= */
-function syncSize(){document.getElementById('sizeInput').value=W;document.getElementById('sizeY').textContent=H;}
+function syncSize(){docSize();}
 function toast(msg,err){const w=document.createElement('div');w.className='toast';w.style.background=err?'#C6442F':'var(--ink)';w.textContent=msg;document.getElementById('toastWrap').appendChild(w);setTimeout(()=>{w.style.opacity='0';w.style.transition='.4s';setTimeout(()=>w.remove(),400);},2000);}
 document.getElementById('btnUndo').onclick=undoStep;document.getElementById('btnUndo2').onclick=undoStep;
 document.getElementById('btnRedo').onclick=redoStep;document.getElementById('btnRedo2').onclick=redoStep;
 document.getElementById('btnClear').onclick=()=>{if(!grid.some(r=>r.some(Boolean)))return toast('已经是空的了~',1);pushHist();grid=makeGrid(H,W);render();updateInfo();toast('画布已清空 🧹');};
 document.getElementById('btnSave').onclick=saveWork;document.getElementById('btnSave2').onclick=saveWork;
-document.getElementById('sizeInput').onchange=e=>{let v=Math.max(4,Math.min(64,+e.target.value||20));resize(v);render();updateInfo();};
+document.getElementById('sizeCol').onchange=e=>{pushHist();applySize(+e.target.value||W,H);updateInfo();};
+document.getElementById('sizeRow').onchange=e=>{pushHist();applySize(W,+e.target.value||H);updateInfo();};
+document.getElementById('sizeTotal').onchange=e=>{pushHist();const d=dimsForTotal(+e.target.value);applySize(d[0],d[1]);updateInfo();};
 document.querySelectorAll('#toolGrid .tool').forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
 document.querySelectorAll('#symRow .sym').forEach(b=>b.onclick=()=>setSym(b.dataset.sym));
 // tabs
@@ -990,7 +1007,7 @@ document.querySelectorAll('#tabs .tab').forEach(b=>b.onclick=()=>{
 
 // 初始
 grid=makeGrid(H,W);
-resize(20);
+applySize(20,20);
 pickColor(PALETTE[7].hex);
 setTool('pen');
 renderPalette();renderTplCats();renderTplGrid();renderEmoCats();renderEmojiGrid();renderTxtColors();renderMine();
